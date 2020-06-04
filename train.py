@@ -88,7 +88,8 @@ def train_and_eval(rank, n_gpus, hps):
     if rank==0:
       train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer)
       evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, writer_eval)
-      utils.save_checkpoint(generator, optimizer_g, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "G_{}.pth".format(epoch)))
+      if epoch % 50 == 0:
+        utils.save_checkpoint(generator, optimizer_g, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "G_{}.pth".format(epoch)))
     else:
       train(rank, epoch, hps, generator, optimizer_g, train_loader, None, None)
 
