@@ -3,7 +3,7 @@
     "use_cuda": true,
     "log_interval": 20,
     "seed": 1234,
-    "epochs": 1000,
+    "epochs": 10000,
     "learning_rate": 1e0,
     "betas": [0.9, 0.98],
     "eps": 1e-9,
