@@ -63,6 +63,9 @@ def train_and_eval(rank, n_gpus, hps):
         batch_size=hps.train.batch_size, pin_memory=True,
         drop_last=True, collate_fn=collate_fn)
 
+  print(len(train_dataset))
+  print(len(train_loader))
+
   generator = models.FlowGenerator(
       n_vocab=len(symbols), 
       out_channels=hps.data.n_mel_channels, 
