@@ -7,9 +7,9 @@ _pad        = '_'
 _punctuation = '!\'(),.:;? '
 _special = '-'
 # Mappings from symbol to numeric ID and vice versa:
-_symbol_to_id = {s: i for i, s in enumerate(symbols)}
+#_symbol_to_id = {s: i for i, s in enumerate(symbols)}
 #map punct to ' ' test
-#_symbol_to_id = {s: i if s not in ([_pad] + list(_special) + list(_punctuation)) else 11 for i, s in enumerate(symbols)}
+_symbol_to_id = {s: i if s not in ([_pad] + list(_special) + list(_punctuation)) else 11 for i, s in enumerate(symbols)}
 _id_to_symbol = {i: s for i, s in enumerate(symbols)}
 
 # Regular expression matching text enclosed in curly braces:
