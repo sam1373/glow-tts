@@ -144,7 +144,7 @@ def get_hparams(init=True):
                       help='JSON file for configuration')
   parser.add_argument('-m', '--model', type=str, required=True,
                       help='Model directory')
-  parser.add_argument('-b', '--batch_size', type=int, default=8, required=True,
+  parser.add_argument('-b', '--batch_size', type=int, default=8, required=False,
                       help='Batch size')
   
   args = parser.parse_args()
