@@ -3,9 +3,12 @@ import re
 from text import cleaners
 from text.symbols import symbols
 
-
+_pad        = '_'
+_punctuation = '!\'(),.:;? '
+_special = '-'
 # Mappings from symbol to numeric ID and vice versa:
-_symbol_to_id = {s: i for i, s in enumerate(symbols)}
+#map punct to ' ' test
+_symbol_to_id = {s: i if s not in ([_pad] + list(_special) + list(_punctuation)) else 11 for i, s in enumerate(symbols)}
 _id_to_symbol = {i: s for i, s in enumerate(symbols)}
 
 # Regular expression matching text enclosed in curly braces:
@@ -34,6 +37,8 @@ def text_to_sequence(text, cleaner_names, dictionary=None):
     Returns:
       List of integers corresponding to the symbols in the text
   '''
+  print(text)
+
   sequence = []
 
   space = _symbols_to_sequence(' ')
@@ -61,6 +66,11 @@ def text_to_sequence(text, cleaner_names, dictionary=None):
   # remove trailing space
   if dictionary is not None:
     sequence = sequence[:-1] if sequence[-1] == space[0] else sequence
+
+  print(sequence)
+  print("|".join([symbols[c] for c in sequence]))
+  print("----------")
+
   return sequence
 
 
@@ -95,4 +105,4 @@ def _arpabet_to_sequence(text):
 
 
 def _should_keep_symbol(s):
-  return s in _symbol_to_id and s is not '_' and s is not '~'
+  return s in _symbol_to_id and s is not '_' and s is not '~'# and s not in ([_pad] + list(_special) + list(_punctuation))
