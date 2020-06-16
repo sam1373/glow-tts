@@ -38,7 +38,7 @@ def text_to_sequence(text, cleaner_names, dictionary=None):
     Returns:
       List of integers corresponding to the symbols in the text
   '''
-  print(text)
+  #print(text)
 
   sequence = []
 
@@ -68,9 +68,9 @@ def text_to_sequence(text, cleaner_names, dictionary=None):
   if dictionary is not None:
     sequence = sequence[:-1] if sequence[-1] == space[0] else sequence
 
-  print(sequence)
-  print("|".join([symbols[c] for c in sequence]))
-  print("----------")
+  #print(sequence)
+  #print("|".join([symbols[c] for c in sequence]))
+  #print("----------")
 
   return sequence
 
