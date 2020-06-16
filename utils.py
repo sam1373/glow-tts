@@ -143,10 +143,12 @@ def get_hparams(init=True):
   parser.add_argument('-c', '--config', type=str, default="./configs/base.json",
                       help='JSON file for configuration')
   parser.add_argument('-m', '--model', type=str, required=True,
-                      help='Model name')
+                      help='Model directory')
+  parser.add_argument('-b', '--batch_size', type=int, default=8, required=True,
+                      help='Batch size')
   
   args = parser.parse_args()
-  model_dir = os.path.join("/logs", args.model)
+  model_dir = args.model#os.path.join("/logs", args.model)
 
   if not os.path.exists(model_dir):
     os.makedirs(model_dir)
@@ -165,6 +167,7 @@ def get_hparams(init=True):
   
   hparams = HParams(**config)
   hparams.model_dir = model_dir
+  hparams.batch_size = args.batch_size
   return hparams
 
 
