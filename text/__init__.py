@@ -7,9 +7,9 @@ _pad        = '_'
 _punctuation = '!\'(),.:;? '
 _special = '-'
 # Mappings from symbol to numeric ID and vice versa:
-#_symbol_to_id = {s: i for i, s in enumerate(symbols)}
+_symbol_to_id = {s: i for i, s in enumerate(symbols)}
 #map punct to ' ' test
-_symbol_to_id = {s: i if s not in ([_pad] + list(_special) + list(_punctuation)) else 11 for i, s in enumerate(symbols)}
+_symbol_to_id_no_punct = {s: i if s not in ([_pad] + list(_special) + list(_punctuation)) else 11 for i, s in enumerate(symbols)}
 _id_to_symbol = {i: s for i, s in enumerate(symbols)}
 
 # Regular expression matching text enclosed in curly braces:
@@ -24,7 +24,7 @@ def get_arpabet(word, dictionary):
     return word
 
 
-def text_to_sequence(text, cleaner_names, dictionary=None):
+def text_to_sequence(text, cleaner_names, dictionary=None, keep_punct=True):
   '''Converts a string of text to a sequence of IDs corresponding to the symbols in the text.
 
     The text can optionally have ARPAbet sequences enclosed in curly braces embedded
@@ -58,9 +58,9 @@ def text_to_sequence(text, cleaner_names, dictionary=None):
             sequence += _symbols_to_sequence(t)
           sequence += space
       else:
-        sequence += _symbols_to_sequence(clean_text)
+        sequence += _symbols_to_sequence(clean_text, keep_punct)
       break
-    sequence += _symbols_to_sequence(_clean_text(m.group(1), cleaner_names))
+    sequence += _symbols_to_sequence(_clean_text(m.group(1), cleaner_names), keep_punct)
     sequence += _arpabet_to_sequence(m.group(2))
     text = m.group(3)
   
@@ -97,8 +97,10 @@ def _clean_text(text, cleaner_names):
   return text
 
 
-def _symbols_to_sequence(symbols):
-  return [_symbol_to_id[s] for s in symbols if _should_keep_symbol(s)]
+def _symbols_to_sequence(symbols, keep_punct=True):
+  if keep_punct:
+    return [_symbol_to_id[s] for s in symbols if _should_keep_symbol(s)]
+  return [_symbol_to_id_no_punct[s] for s in symbols if _should_keep_symbol(s)]
 
 
 def _arpabet_to_sequence(text):

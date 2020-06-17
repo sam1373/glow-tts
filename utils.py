@@ -146,6 +146,8 @@ def get_hparams(init=True):
                       help='Model directory')
   parser.add_argument('-b', '--batch_size', type=int, default=8, required=False,
                       help='Batch size')
+  parser.add_argument('-p', '--keep_punct', type=bool, default=True, required=False,
+                      help='Keep punctuation or turn it into blanks')
   
   args = parser.parse_args()
   model_dir = args.model#os.path.join("/logs", args.model)
@@ -168,6 +170,7 @@ def get_hparams(init=True):
   hparams = HParams(**config)
   hparams.model_dir = model_dir
   hparams.batch_size = args.batch_size
+  hparams.data.keep_punct = args.keep_punct
   return hparams
 
 
@@ -177,8 +180,16 @@ def get_hparams_from_dir(model_dir):
     data = f.read()
   config = json.loads(data)
 
-  hparams =HParams(**config)
+  hparams = HParams(**config)
   hparams.model_dir = model_dir
+  return hparams
+
+def get_hparams_from_file(config_path):
+  with open(config_path, "r") as f:
+    data = f.read()
+  config = json.loads(data)
+
+  hparams = HParams(**config)
   return hparams
 
 

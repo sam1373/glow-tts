@@ -9,9 +9,10 @@
     "eps": 1e-9,
     "warmup_steps": 4000,
     "scheduler": "noam",
-    "batch_size": 32,
+    "batch_size": 8,
     "ddi": true,
-    "fp16_run": true
+    "fp16_run": true,
+    "save_every": 50
   },
   "data": {
     "load_mel_from_disk": false,
