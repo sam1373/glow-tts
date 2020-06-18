@@ -169,7 +169,7 @@ def get_hparams(init=True):
   
   hparams = HParams(**config)
   hparams.model_dir = model_dir
-  hparams.batch_size = args.batch_size
+  hparams.train.batch_size = args.batch_size
   hparams.data.keep_punct = args.keep_punct
   return hparams
 
