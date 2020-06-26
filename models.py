@@ -8,6 +8,11 @@ import commons
 import attentions
 import monotonic_align
 
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+from extract_durs import DurationExtractor
 
 class DurationPredictor(nn.Module):
   def __init__(self, in_channels, filter_channels, kernel_size, p_dropout):
@@ -37,8 +42,37 @@ class DurationPredictor(nn.Module):
     x = self.proj(x * x_mask)
     return x * x_mask
 
+class Encoder(nn.Module):
+  def __init__(self, in_channels, filter_channels, out_channels, kernel_size, p_dropout):
+    super().__init__()
 
-class TextEncoder(nn.Module):
+    self.in_channels = in_channels
+    self.filter_channels = filter_channels
+    self.kernel_size = kernel_size
+    self.p_dropout = p_dropout
+    self.out_channels = out_channels
+
+    self.drop = nn.Dropout(p_dropout)
+    self.conv_1 = nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size//2)
+    self.norm_1 = attentions.LayerNorm(filter_channels)
+    self.conv_2 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size//2)
+    self.norm_2 = attentions.LayerNorm(filter_channels)
+    self.proj = nn.Conv1d(filter_channels, out_channels, 1)
+
+  def forward(self, x, x_mask):
+    x = self.conv_1(x * x_mask)
+    x = torch.relu(x)
+    x = self.norm_1(x)
+    x = self.drop(x)
+    x = self.conv_2(x * x_mask)
+    x = torch.relu(x)
+    x = self.norm_2(x)
+    x = self.drop(x)
+    x = self.proj(x * x_mask)
+    return x * x_mask
+
+
+class TextPreEncoder(nn.Module):
   def __init__(self, 
       n_vocab, 
       out_channels, 
@@ -72,56 +106,58 @@ class TextEncoder(nn.Module):
     self.prenet = prenet
     self.gin_channels = gin_channels
 
-    self.emb = nn.Embedding(n_vocab, hidden_channels)
-    nn.init.normal_(self.emb.weight, 0.0, hidden_channels**-0.5)
-
-    if prenet:
-      self.pre = modules.ConvReluNorm(hidden_channels, hidden_channels, hidden_channels, kernel_size=5, n_layers=3, p_dropout=0.5)
-    self.encoder = attentions.Encoder(
-      hidden_channels,
-      filter_channels,
-      n_heads,
-      n_layers,
-      kernel_size,
-      p_dropout,
-      window_size=window_size,
-      block_length=block_length,
-    )
-
-    self.proj_m = nn.Conv1d(hidden_channels, out_channels, 1)
-    if not mean_only:
-      self.proj_s = nn.Conv1d(hidden_channels, out_channels, 1)
-    self.proj_w = DurationPredictor(hidden_channels + gin_channels, filter_channels_dp, kernel_size, p_dropout)
+    self.proj_w = DurationPredictor(n_vocab + gin_channels, filter_channels_dp, kernel_size, p_dropout)
   
   def forward(self, x, x_lengths, g=None):
-    x = self.emb(x) * math.sqrt(self.hidden_channels) # [b, t, h]
-    x = torch.transpose(x, 1, -1) # [b, h, t]
-    x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x.size(2)), 1).to(x.dtype)
+    x_oh = torch.zeros(x.shape[0], self.n_vocab, x.shape[1]).cuda()
+    x_oh.scatter_(1, x.unsqueeze(1), 1)
 
-    if self.prenet:
-      x = self.pre(x, x_mask)
-    x = self.encoder(x, x_mask)
+    x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x_oh.size(2)), 1).to(x.dtype)
+
+    #how does this work with masks
+    blanks = torch.zeros(x_oh.shape[0], x_oh.shape[1], x_oh.shape[2]).cuda()
+    blanks[:, 0] = 1.
+
+    x_lengths_blanks = x_lengths * 2 + 1
+
+    #print(x_lengths_blanks)
+
+    #print(x_oh.shape)
+
+    #print(blanks.shape)
+
+    x_oh_blanks = torch.stack([blanks, x_oh], dim=-1).view(x_oh.shape[0], x_oh.shape[1], -1)
+    x_oh_blanks = torch.cat([x_oh_blanks, torch.zeros(x_oh.shape[0], x_oh.shape[1], 1).cuda()], dim=-1)
+
+    x_oh_blanks[:, 0, -1] = 1.
+
+    #print(x_oh_blanks.shape)
+
+    x_mask_blanks = torch.unsqueeze(commons.sequence_mask(x_lengths_blanks, x_oh_blanks.size(2)), 1).to(x.dtype)
+
+    #print(x_mask_blanks.shape)
+
+    #plt.imshow(x_oh_blanks[0].cpu())
+    #plt.show()
 
     if g is not None:
       g_exp = g.expand(-1, -1, x.size(-1))
-      x_dp = torch.cat([torch.detach(x), g_exp], 1)
+      x_dp = torch.cat([torch.detach(x_oh_blanks), g_exp], 1)
     else:
-      x_dp = torch.detach(x)
+      x_dp = torch.detach(x_oh_blanks)
 
-    x_m = self.proj_m(x) * x_mask
-    if not self.mean_only:
-      x_logs = self.proj_s(x) * x_mask
-    else:
-      x_logs = torch.zeros_like(x_m)
+    logw = self.proj_w(x_dp, x_mask_blanks).squeeze(1)
 
-    logw = self.proj_w(x_dp, x_mask)
-    return x_m, x_logs, logw, x_mask
+    #print(logw.shape)
+
+    return x_oh, x_oh_blanks, logw, x_mask_blanks
 
 
 class FlowSpecDecoder(nn.Module):
   def __init__(self, 
       in_channels, 
-      hidden_channels, 
+      hidden_channels,
+      out_channels, 
       kernel_size, 
       dilation_rate, 
       n_blocks, 
@@ -167,6 +203,7 @@ class FlowSpecDecoder(nn.Module):
     else:
       flows = reversed(self.flows)
       logdet_tot = None
+
 
     if self.n_sqz > 1:
       x, x_mask = commons.squeeze(x, x_mask, self.n_sqz)
@@ -241,7 +278,7 @@ class FlowGenerator(nn.Module):
     self.hidden_channels_dec = hidden_channels_dec
     self.prenet = prenet
 
-    self.encoder = TextEncoder(
+    self.pre_encoder = TextPreEncoder(
         n_vocab, 
         out_channels, 
         hidden_channels_enc or hidden_channels, 
@@ -257,9 +294,18 @@ class FlowGenerator(nn.Module):
         prenet=prenet,
         gin_channels=gin_channels)
 
+    self.encoder = Encoder(
+        n_vocab,
+        hidden_channels_enc,
+        n_vocab,
+        kernel_size,
+        p_dropout
+    )
+
     self.decoder = FlowSpecDecoder(
-        out_channels, 
+        out_channels,
         hidden_channels_dec or hidden_channels, 
+        n_vocab * n_sqz,
         kernel_size_dec, 
         dilation_rate, 
         n_blocks_dec, 
@@ -270,6 +316,8 @@ class FlowGenerator(nn.Module):
         sigmoid_scale=sigmoid_scale,
         gin_channels=gin_channels)
 
+    self.dur_extractor = DurationExtractor()
+
     if n_speakers > 1:
       self.emb_g = nn.Embedding(n_speakers, gin_channels)
       nn.init.uniform_(self.emb_g.weight, -0.1, 0.1)
@@ -277,44 +325,94 @@ class FlowGenerator(nn.Module):
   def forward(self, x, x_lengths, y=None, y_lengths=None, g=None, gen=False, noise_scale=1., length_scale=1.):
     if g is not None:
       g = F.normalize(self.emb_g(g)).unsqueeze(-1) # [b, h]
-    x_m, x_logs, logw, x_mask = self.encoder(x, x_lengths, g=g)
 
-    if gen:
-      w = torch.exp(logw) * x_mask * length_scale
-      w_ceil = torch.ceil(w)
-      y_lengths = torch.clamp_min(torch.sum(w_ceil, [1, 2]), 1).long()
-      y_max_length = None
-    else:
-      y_max_length = y.size(2)
+    #print(x)
+
+    y_max_length = y.size(2)
     y, y_lengths, y_max_length = self.preprocess(y, y_lengths, y_max_length)
-    y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x_mask.dtype)
+    y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x.dtype)
+
+    #ctc_out = self.decoder(y)
+    ctc_out, _ = self.decoder(y, y_mask, g=g, reverse=False)
+
+    #print(self.out_channels)
+    #print(ctc_out.shape)
+
+    ctc_out_padded = ctc_out
+
+    ctc_out = ctc_out[:, :self.n_vocab]
+
+    #print(ctc_out.shape)
+
+    ctc_out_greedy = torch.argmax(ctc_out, dim=1)
+
+
+    #"true" durations extracted from ctc
+    durs_from_ctc = torch.zeros([x.shape[0], x.shape[1] * 2 + 1]).cuda()
+
+    for i in range(len(ctc_out)):
+      blanks, cnts = self.dur_extractor(x[i].cpu().numpy(), ctc_out_greedy[i].detach().cpu().numpy(),
+                                      ctc_out[i].detach().cpu().numpy(), y_lengths[i].cpu().numpy())
+
+      combined_durs = np.empty(blanks.size + cnts.size)
+      combined_durs[::2] = blanks
+      combined_durs[1::2] = cnts
+
+      durs_from_ctc[i] = torch.Tensor(combined_durs).cuda()
+
+    logw_ = torch.log(durs_from_ctc)
+    #logw_ - true log durations
+
+    x_oh, x_oh_blanks, logw, x_mask = self.pre_encoder(x, x_lengths, g=g)
+    #logw - log predicted durations
+
+    #print(logw.shape, logw_.shape)
+
     attn_mask = torch.unsqueeze(x_mask, -1) * torch.unsqueeze(y_mask, 2)
 
-    if gen:
-      attn = commons.generate_path(w_ceil.squeeze(1), attn_mask.squeeze(1)).unsqueeze(1)
-      y_m = torch.matmul(attn.squeeze(1).transpose(1, 2), x_m.transpose(1, 2)).transpose(1, 2) # [b, t', t], [b, t, d] -> [b, d, t']
-      y_logs = torch.matmul(attn.squeeze(1).transpose(1, 2), x_logs.transpose(1, 2)).transpose(1, 2) # [b, t', t], [b, t, d] -> [b, d, t']
-      logw_ = torch.log(1e-8 + torch.sum(attn, -1)) * x_mask
+    path = commons.generate_path(durs_from_ctc, attn_mask.squeeze(1)).unsqueeze(1).float()
 
-      z = (y_m + torch.exp(y_logs) * torch.randn_like(y_m) * noise_scale) * y_mask
-      y, logdet = self.decoder(z, y_mask, g=g, reverse=True)
-      return (y, y_m, y_logs, logdet), attn, logw, logw_, x_m, x_logs
-    else:
-      z, logdet = self.decoder(y, y_mask, g=g, reverse=False)
-      with torch.no_grad():
-        x_s_sq_r = torch.exp(-2 * x_logs)
-        logp1 = torch.sum(-0.5 * math.log(2 * math.pi) - x_logs, [1]).unsqueeze(-1) # [b, t, 1]
-        logp2 = torch.matmul(x_s_sq_r.transpose(1,2), -0.5 * (z ** 2)) # [b, t, d] x [b, d, t'] = [b, t, t']
-        logp3 = torch.matmul((x_m * x_s_sq_r).transpose(1,2), z) # [b, t, d] x [b, d, t'] = [b, t, t']
-        logp4 = torch.sum(-0.5 * (x_m ** 2) * x_s_sq_r, [1]).unsqueeze(-1) # [b, t, 1]
-        logp = logp1 + logp2 + logp3 + logp4 # [b, t, t']
+    x_proj = torch.matmul(path.squeeze(1).transpose(1, 2), x_oh_blanks.transpose(1, 2)).transpose(1, 2)
 
-        attn = monotonic_align.maximum_path(logp, attn_mask.squeeze(1)).unsqueeze(1).detach()
-      y_m = torch.matmul(attn.squeeze(1).transpose(1, 2), x_m.transpose(1, 2)).transpose(1, 2) # [b, t', t], [b, t, d] -> [b, d, t']
-      y_logs = torch.matmul(attn.squeeze(1).transpose(1, 2), x_logs.transpose(1, 2)).transpose(1, 2) # [b, t', t], [b, t, d] -> [b, d, t']
-      logw_ = torch.log(1e-8 + torch.sum(attn, -1)) * x_mask
+    x_proj_greedy = torch.argmax(x_proj, dim=1)
 
-      return (z, y_m, y_logs, logdet), attn, logw, logw_, x_m, x_logs
+    #print(x_proj_greedy)
+
+    ##plt.imshow(x_proj[0].cpu())
+    ##plt.show()
+
+    #at this point x_proj is multiplied one hot representations, contains both blanks and symbols
+    #next feed into encoder to get ctc
+
+    pred_ctc_output = self.encoder(x_proj, y_mask)
+    #predicted ctc output by encoder
+
+    #print(pred_ctc_output.shape)
+    #plt.imshow(pred_ctc_output[0].detach().cpu())
+    #plt.show()
+
+    #print(pred_ctc_output.shape)
+
+    pred_ctc_out = torch.cat([pred_ctc_output, torch.zeros(pred_ctc_output.shape[0], self.out_channels - self.n_vocab, pred_ctc_output.shape[2]).cuda()],
+                                  dim=1)
+    #padding to correct out channels for decoder
+
+    #print(pred_ctc_output.shape)
+
+    #now we need to reconstruct the spectrogram
+    #by reversed decoder
+    y_pred, _ = self.decoder(pred_ctc_out, y_mask, g=g, reverse=True)
+    #tested that original padded ctc works
+
+    #print(y_pred.shape)
+
+    #plt.imshow(y[0].cpu())
+    #plt.show()
+
+    #plt.imshow(y_pred[0].detach().cpu())
+    #plt.show()
+
+    return ctc_out, pred_ctc_out, logw, logw_, y_pred
 
   def preprocess(self, y, y_lengths, y_max_length):
     if y_max_length is not None:

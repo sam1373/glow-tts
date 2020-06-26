@@ -74,12 +74,8 @@ class CouplingBlock(nn.Module):
 
 
   def forward(self, x, x_mask=None, reverse=False, g=None, **kwargs):
-    b, c, t = x.size()
     if x_mask is None:
       x_mask = 1
-      attn_mask = None
-    else:
-      attn_mask = x_mask.unsqueeze(2) * x_mask.unsqueeze(-1)
     x_0, x_1 = x[:,:self.in_channels//2], x[:,self.in_channels//2:]
 
     x = self.start(x_0) * x_mask

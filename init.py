@@ -48,6 +48,7 @@ def main():
     x, x_lengths = x.cuda(), x_lengths.cuda()
     y, y_lengths = y.cuda(), y_lengths.cuda()
 
+
     _ = generator(x, x_lengths, y, y_lengths, gen=False)
     break
 

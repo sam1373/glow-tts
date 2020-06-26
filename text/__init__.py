@@ -3,9 +3,13 @@ import re
 from text import cleaners
 from text.symbols import symbols
 
-
+_pad        = '_'
+_punctuation = '!\'(),.:;? '
+_special = '-'
 # Mappings from symbol to numeric ID and vice versa:
 _symbol_to_id = {s: i for i, s in enumerate(symbols)}
+#map punct to ' ' test
+_symbol_to_id_no_punct = {s: i if s not in ([_pad] + list(_special) + list(_punctuation)) else 11 for i, s in enumerate(symbols)}
 _id_to_symbol = {i: s for i, s in enumerate(symbols)}
 
 # Regular expression matching text enclosed in curly braces:
@@ -20,7 +24,7 @@ def get_arpabet(word, dictionary):
     return word
 
 
-def text_to_sequence(text, cleaner_names, dictionary=None):
+def text_to_sequence(text, cleaner_names, dictionary=None, keep_punct=True):
   '''Converts a string of text to a sequence of IDs corresponding to the symbols in the text.
 
     The text can optionally have ARPAbet sequences enclosed in curly braces embedded
@@ -34,6 +38,9 @@ def text_to_sequence(text, cleaner_names, dictionary=None):
     Returns:
       List of integers corresponding to the symbols in the text
   '''
+  #print(text)
+  text = text.lower()
+
   sequence = []
 
   space = _symbols_to_sequence(' ')
@@ -43,24 +50,29 @@ def text_to_sequence(text, cleaner_names, dictionary=None):
     if not m:
       clean_text = _clean_text(text, cleaner_names)
       if dictionary is not None:
-        clean_text = [get_arpabet(w, dictionary) for w in clean_text.split(" ")]
+        clean_text = [get_arpabet(w, dictionary) for w in re.findall(r"[\w']+|[.,!?;]", clean_text)]
         for i in range(len(clean_text)):
           t = clean_text[i]
           if t.startswith("{"):
             sequence += _arpabet_to_sequence(t[1:-1])
           else:
-            sequence += _symbols_to_sequence(t)
+            sequence += _symbols_to_sequence(t, keep_punct)
           sequence += space
       else:
-        sequence += _symbols_to_sequence(clean_text)
+        sequence += _symbols_to_sequence(clean_text, keep_punct)
       break
-    sequence += _symbols_to_sequence(_clean_text(m.group(1), cleaner_names))
+    sequence += _symbols_to_sequence(_clean_text(m.group(1), cleaner_names), keep_punct)
     sequence += _arpabet_to_sequence(m.group(2))
     text = m.group(3)
-  
+
   # remove trailing space
   if dictionary is not None:
     sequence = sequence[:-1] if sequence[-1] == space[0] else sequence
+
+  #print(sequence)
+  #print("|".join([symbols[c] for c in sequence]))
+  #print("----------")
+
   return sequence
 
 
@@ -86,8 +98,10 @@ def _clean_text(text, cleaner_names):
   return text
 
 
-def _symbols_to_sequence(symbols):
-  return [_symbol_to_id[s] for s in symbols if _should_keep_symbol(s)]
+def _symbols_to_sequence(symbols, keep_punct=True):
+  if keep_punct:
+    return [_symbol_to_id[s] for s in symbols if _should_keep_symbol(s)]
+  return [_symbol_to_id_no_punct[s] for s in symbols if _should_keep_symbol(s)]
 
 
 def _arpabet_to_sequence(text):
@@ -95,4 +109,4 @@ def _arpabet_to_sequence(text):
 
 
 def _should_keep_symbol(s):
-  return s in _symbol_to_id and s is not '_' and s is not '~'
+  return s in _symbol_to_id and s is not '_' and s is not '~'# and s not in ([_pad] + list(_special) + list(_punctuation))

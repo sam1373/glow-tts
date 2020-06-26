@@ -22,6 +22,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         self.load_mel_from_disk = hparams.load_mel_from_disk
         self.add_noise = hparams.add_noise
         self.add_space = hparams.add_space
+        self.keep_punct = hparams.keep_punct
         if getattr(hparams, "cmudict_path", None) is not None:
           self.cmudict = cmudict.CMUDict(hparams.cmudict_path)
         self.stft = commons.TacotronSTFT(
@@ -62,7 +63,7 @@ class TextMelLoader(torch.utils.data.Dataset):
         if self.add_space:
           text = " " + text.strip() + " "
         text_norm = torch.IntTensor(
-            text_to_sequence(text, self.text_cleaners, getattr(self, "cmudict", None)))
+            text_to_sequence(text, self.text_cleaners, getattr(self, "cmudict", None), self.keep_punct))
         return text_norm
 
     def __getitem__(self, index):
@@ -182,7 +183,7 @@ class TextMelSpeakerLoader(torch.utils.data.Dataset):
         if self.add_space:
           text = " " + text.strip() + " "
         text_norm = torch.IntTensor(
-            text_to_sequence(text, self.text_cleaners, getattr(self, "cmudict", None)))
+            text_to_sequence(text, self.text_cleaners, getattr(self, "cmudict", None), self.keep_punct))
         return text_norm
 
     def get_sid(self, sid):

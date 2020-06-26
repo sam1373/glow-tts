@@ -111,6 +111,7 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
     
     (z, y_m, y_logs, logdet), attn, logw, logw_, x_m, x_logs = generator(x, x_lengths, y, y_lengths, gen=False)
     l_mle = 0.5 * math.log(2 * math.pi) + (torch.sum(y_logs) + 0.5 * torch.sum(torch.exp(-2 * y_logs) * (z - y_m)**2) - torch.sum(logdet)) / (torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels) 
+    
     l_length = torch.sum((logw - logw_)**2) / torch.sum(x_lengths)
 
     loss_gs = [l_mle, l_length]
