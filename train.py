@@ -20,7 +20,7 @@ from text.symbols import symbols
                             
 
 global_step = 0
-
+ctc_loss = torch.nn.CTCLoss()
 
 def main():
   """Assume Single Node Multi GPUs Training Only"""
@@ -32,6 +32,7 @@ def main():
 
   hps = utils.get_hparams()
   mp.spawn(train_and_eval, nprocs=n_gpus, args=(n_gpus, hps,))
+  #train_and_eval(0, n_gpus, hps)
 
 
 def train_and_eval(rank, n_gpus, hps):
@@ -70,7 +71,7 @@ def train_and_eval(rank, n_gpus, hps):
       n_vocab=len(symbols), 
       out_channels=hps.data.n_mel_channels, 
       **hps.model).cuda(rank)
-  optimizer_g = commons.Adam(generator.parameters(), scheduler=hps.train.scheduler, dim_model=hps.model.hidden_channels, warmup_steps=hps.train.warmup_steps, lr=hps.train.learning_rate, betas=hps.train.betas, eps=hps.train.eps)
+  optimizer_g = commons.Adam(generator.parameters(), n_gpus=n_gpus, scheduler=hps.train.scheduler, dim_model=hps.model.hidden_channels, warmup_steps=hps.train.warmup_steps, lr=hps.train.learning_rate, betas=hps.train.betas, eps=hps.train.eps)
   if hps.train.fp16_run:
     generator, optimizer_g._optim = amp.initialize(generator, optimizer_g._optim, opt_level="O1")
   generator = DDP(generator)
@@ -91,7 +92,7 @@ def train_and_eval(rank, n_gpus, hps):
     if rank==0:
       train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer)
       evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, writer_eval)
-      if epoch % 200 == 0:
+      if epoch % 50 == 0:
         utils.save_checkpoint(generator, optimizer_g, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "G_{}.pth".format(epoch)))
     else:
       train(rank, epoch, hps, generator, optimizer_g, train_loader, None, None)
@@ -106,15 +107,17 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
     x, x_lengths = x.cuda(rank, non_blocking=True), x_lengths.cuda(rank, non_blocking=True)
     y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
 
+
     # Train Generator
     optimizer_g.zero_grad()
-    
-    (z, y_m, y_logs, logdet), attn, logw, logw_, x_m, x_logs = generator(x, x_lengths, y, y_lengths, gen=False)
-    l_mle = 0.5 * math.log(2 * math.pi) + (torch.sum(y_logs) + 0.5 * torch.sum(torch.exp(-2 * y_logs) * (z - y_m)**2) - torch.sum(logdet)) / (torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels) 
-    
-    l_length = torch.sum((logw - logw_)**2) / torch.sum(x_lengths)
 
-    loss_gs = [l_mle, l_length]
+    ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths = generator(x, x_lengths, y, y_lengths, gen=False)
+    #logger.info('{} {} {} {}'.format(ctc_out.shape, x.shape, y_lengths.shape, x_lengths.shape))
+    l_ctc = ctc_loss(ctc_out.permute(2, 0, 1), x, y_lengths, x_lengths)
+    l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred)**2) / (torch.sum(y_lengths) * y.shape[1])
+    #l_mle = 0.5 * math.log(2 * math.pi) + (torch.sum(y_logs) + 0.5 * torch.sum(torch.exp(-2 * y_logs) * (z - y_m)**2) - torch.sum(logdet)) / (torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+    l_length = torch.sum((logw - logw_)**2) / torch.sum(x_lengths)
+    loss_gs = [l_ctc, l_tts, l_length]
     loss_g = sum(loss_gs)
 
     if hps.train.fp16_run:
@@ -125,10 +128,10 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
       loss_g.backward()
       grad_norm = commons.clip_grad_value_(generator.parameters(), 5)
     optimizer_g.step()
-    
+
     if rank==0:
       if batch_idx % hps.train.log_interval == 0:
-        (y_gen, *_), *_ = generator.module(x[:1], x_lengths[:1], gen=True)
+        #(y_gen, *_), *_ = generator.module(x[:1], x_lengths[:1], gen=True)
         logger.info('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
           epoch, batch_idx * len(x), len(train_loader.dataset),
           100. * batch_idx / len(train_loader),
@@ -137,14 +140,15 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
         
         scalar_dict = {"loss/g/total": loss_g, "learning_rate": optimizer_g.get_lr(), "grad_norm": grad_norm}
         scalar_dict.update({"loss/g/{}".format(i): v for i, v in enumerate(loss_gs)})
-        utils.summarize(
+        """utils.summarize(
           writer=writer,
           global_step=global_step, 
           images={"y_org": utils.plot_spectrogram_to_numpy(y[0].data.cpu().numpy()), 
             "y_gen": utils.plot_spectrogram_to_numpy(y_gen[0].data.cpu().numpy()), 
             "attn": utils.plot_alignment_to_numpy(attn[0,0].data.cpu().numpy()),
             },
-          scalars=scalar_dict)
+          scalars=scalar_dict)"""
+
     global_step += 1
   
   if rank == 0:
@@ -161,11 +165,13 @@ def evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, write
         x, x_lengths = x.cuda(rank, non_blocking=True), x_lengths.cuda(rank, non_blocking=True)
         y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
 
-        
-        (z, y_m, y_logs, logdet), attn, logw, logw_, x_m, x_logs = generator(x, x_lengths, y, y_lengths, gen=False)
-        l_mle = 0.5 * math.log(2 * math.pi) + (torch.sum(y_logs) + 0.5 * torch.sum(torch.exp(-2 * y_logs) * (z - y_m)**2) - torch.sum(logdet)) / (torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
-        l_length = torch.sum((logw - logw_)**2) / torch.sum(x_lengths)
-        loss_gs = [l_mle, l_length]
+        ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths = generator(x, x_lengths, y, y_lengths, gen=False)
+        print(ctc_out.min(), ctc_out.max())
+        l_ctc = ctc_loss(ctc_out.permute(2, 0, 1), x, y_lengths, x_lengths)
+        l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (torch.sum(y_lengths) * y.shape[1])
+        l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
+        print(l_ctc, l_tts, l_length)
+        loss_gs = [l_ctc, l_tts, l_length]
         loss_g = sum(loss_gs)
 
         if batch_idx == 0:

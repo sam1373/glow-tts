@@ -10,7 +10,7 @@ import monotonic_align
 
 import numpy as np
 
-import matplotlib.pyplot as plt
+
 
 from extract_durs import DurationExtractor
 
@@ -342,7 +342,6 @@ class FlowGenerator(nn.Module):
 
     ctc_out = ctc_out[:, :self.n_vocab]
 
-    #print(ctc_out.shape)
 
     ctc_out_greedy = torch.argmax(ctc_out, dim=1)
 
@@ -402,6 +401,7 @@ class FlowGenerator(nn.Module):
     #now we need to reconstruct the spectrogram
     #by reversed decoder
     y_pred, _ = self.decoder(pred_ctc_out, y_mask, g=g, reverse=True)
+    y_pred = y_pred * y_mask
     #tested that original padded ctc works
 
     #print(y_pred.shape)
@@ -412,7 +412,7 @@ class FlowGenerator(nn.Module):
     #plt.imshow(y_pred[0].detach().cpu())
     #plt.show()
 
-    return ctc_out, pred_ctc_out, logw, logw_, y_pred
+    return ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths
 
   def preprocess(self, y, y_lengths, y_max_length):
     if y_max_length is not None:
