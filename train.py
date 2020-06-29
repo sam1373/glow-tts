@@ -71,7 +71,7 @@ def train_and_eval(rank, n_gpus, hps):
       n_vocab=len(symbols), 
       out_channels=hps.data.n_mel_channels, 
       **hps.model).cuda(rank)
-  optimizer_g = commons.Adam(generator.parameters(), n_gpus=n_gpus, scheduler=hps.train.scheduler, dim_model=hps.model.hidden_channels, warmup_steps=hps.train.warmup_steps, lr=hps.train.learning_rate, betas=hps.train.betas, eps=hps.train.eps)
+  optimizer_g = commons.Adam(generator.parameters(), scheduler=hps.train.scheduler, dim_model=hps.model.hidden_channels, warmup_steps=hps.train.warmup_steps, lr=hps.train.learning_rate, betas=hps.train.betas, eps=hps.train.eps)
   if hps.train.fp16_run:
     generator, optimizer_g._optim = amp.initialize(generator, optimizer_g._optim, opt_level="O1")
   generator = DDP(generator)
@@ -117,6 +117,7 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
     l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred)**2) / (torch.sum(y_lengths) * y.shape[1])
     #l_mle = 0.5 * math.log(2 * math.pi) + (torch.sum(y_logs) + 0.5 * torch.sum(torch.exp(-2 * y_logs) * (z - y_m)**2) - torch.sum(logdet)) / (torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
     l_length = torch.sum((logw - logw_)**2) / torch.sum(x_lengths)
+    #print(l_ctc, l_tts, l_length)
     loss_gs = [l_ctc, l_tts, l_length]
     loss_g = sum(loss_gs)
 

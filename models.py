@@ -350,20 +350,29 @@ class FlowGenerator(nn.Module):
     durs_from_ctc = torch.zeros([x.shape[0], x.shape[1] * 2 + 1]).cuda()
 
     for i in range(len(ctc_out)):
-      blanks, cnts = self.dur_extractor(x[i].cpu().numpy(), ctc_out_greedy[i].detach().cpu().numpy(),
-                                      ctc_out[i].detach().cpu().numpy(), y_lengths[i].cpu().numpy())
+      blanks, cnts = self.dur_extractor(x[i, :x_lengths[i]].cpu().numpy(), ctc_out_greedy[i, :y_lengths[i]].detach().cpu().numpy(),
+                                      ctc_out[i, :y_lengths[i]].detach().cpu().numpy(), y_lengths[i].cpu().numpy())
 
       combined_durs = np.empty(blanks.size + cnts.size)
       combined_durs[::2] = blanks
       combined_durs[1::2] = cnts
 
-      durs_from_ctc[i] = torch.Tensor(combined_durs).cuda()
+      #print(blanks.size, cnts.size)
+      #print(combined_durs.shape, durs_from_ctc.shape)
+      #print(x_lengths[i])
 
-    logw_ = torch.log(durs_from_ctc)
+      durs_from_ctc[i, :combined_durs.shape[0]] = torch.Tensor(combined_durs).cuda()
+
+    logw_ = torch.log(durs_from_ctc + 1.)
     #logw_ - true log durations
+
+    #print(durs_from_ctc[0])
+    #print(logw_[0])
 
     x_oh, x_oh_blanks, logw, x_mask = self.pre_encoder(x, x_lengths, g=g)
     #logw - log predicted durations
+
+    logw_ = logw_ * x_mask
 
     #print(logw.shape, logw_.shape)
 

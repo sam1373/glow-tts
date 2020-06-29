@@ -282,7 +282,10 @@ class DurationExtractor(PadProcesser):
         gen = Seq(*self.generate(text.tokens, alignment, ctc.cnts)).merge()
         #         gen = gen.merge().adjust_cnt(gen.total - mel_len)
 
-        print(gen.total, mel_len)
+        #print(gen.total, mel_len)
+        #print(gen.tokens)
+        #print(text.tokens)
+
         # Two durs conditions.
         assert gen.tokens == text.tokens
         #         assert gen.total == mel_len
