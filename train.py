@@ -163,7 +163,7 @@ def evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, write
         y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
 
         ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths = generator(x, x_lengths, y, y_lengths, gen=False)
-        l_ctc = ctc_loss(ctc_out.permute(2, 0, 1), x, y_lengths, x_lengths)
+        l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
         l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (torch.sum(y_lengths) * y.shape[1])
         l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
         loss_gs = [l_ctc, l_tts, l_length]
