@@ -17,7 +17,6 @@ import models
 import commons
 import utils
 from text.symbols import symbols
-                            
 
 global_step = 0
 ctc_loss = torch.nn.CTCLoss()
@@ -112,12 +111,9 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
     optimizer_g.zero_grad()
 
     ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths = generator(x, x_lengths, y, y_lengths, gen=False)
-    #logger.info('{} {} {} {}'.format(ctc_out.shape, x.shape, y_lengths.shape, x_lengths.shape))
-    l_ctc = ctc_loss(ctc_out.permute(2, 0, 1), x, y_lengths, x_lengths)
+    l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
     l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred)**2) / (torch.sum(y_lengths) * y.shape[1])
-    #l_mle = 0.5 * math.log(2 * math.pi) + (torch.sum(y_logs) + 0.5 * torch.sum(torch.exp(-2 * y_logs) * (z - y_m)**2) - torch.sum(logdet)) / (torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
     l_length = torch.sum((logw - logw_)**2) / torch.sum(x_lengths)
-    #print(l_ctc, l_tts, l_length)
     loss_gs = [l_ctc, l_tts, l_length]
     loss_g = sum(loss_gs)
 
@@ -170,7 +166,6 @@ def evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, write
         l_ctc = ctc_loss(ctc_out.permute(2, 0, 1), x, y_lengths, x_lengths)
         l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (torch.sum(y_lengths) * y.shape[1])
         l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
-        print(l_ctc, l_tts, l_length)
         loss_gs = [l_ctc, l_tts, l_length]
         loss_g = sum(loss_gs)
 
