@@ -10,8 +10,6 @@ import monotonic_align
 
 import numpy as np
 
-
-
 from extract_durs import DurationExtractor
 
 class DurationPredictor(nn.Module):
@@ -326,63 +324,73 @@ class FlowGenerator(nn.Module):
     if g is not None:
       g = F.normalize(self.emb_g(g)).unsqueeze(-1) # [b, h]
 
-    #print(x)
-
-    y_max_length = y.size(2)
-    y, y_lengths, y_max_length = self.preprocess(y, y_lengths, y_max_length)
-    y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x.dtype)
-
-    #ctc_out = self.decoder(y)
-    ctc_out, _ = self.decoder(y, y_mask, g=g, reverse=False)
-
-    #print(self.out_channels)
-    #print(ctc_out.shape)
-
-    ctc_out_padded = ctc_out
-
-    ctc_out = ctc_out[:, :self.n_vocab]
-
-
-    ctc_out_greedy = torch.argmax(ctc_out, dim=1)
-
-
-    #"true" durations extracted from ctc
-    durs_from_ctc = torch.zeros([x.shape[0], x.shape[1] * 2 + 1]).cuda()
-
-    for i in range(len(ctc_out)):
-      blanks, cnts = self.dur_extractor(x[i, :x_lengths[i]].cpu().numpy(), ctc_out_greedy[i, :y_lengths[i]].detach().cpu().numpy(),
-                                      ctc_out[i, :y_lengths[i]].detach().cpu().numpy(), y_lengths[i].cpu().numpy())
-
-      combined_durs = np.empty(blanks.size + cnts.size)
-      combined_durs[::2] = blanks
-      combined_durs[1::2] = cnts
-
-      #print(blanks.size, cnts.size)
-      #print(combined_durs.shape, durs_from_ctc.shape)
-      #print(x_lengths[i])
-
-      durs_from_ctc[i, :combined_durs.shape[0]] = torch.Tensor(combined_durs).cuda()
-
-    logw_ = torch.log(durs_from_ctc + 1.)
-    #logw_ - true log durations
-
-    #print(durs_from_ctc[0])
-    #print(logw_[0])
-
     x_oh, x_oh_blanks, logw, x_mask = self.pre_encoder(x, x_lengths, g=g)
     #logw - log predicted durations
 
-    logw_ = logw_ * x_mask
 
-    #print(logw.shape, logw_.shape)
+
+    if gen == False:
+
+      y_max_length = y.size(2)
+      y, y_lengths, y_max_length = self.preprocess(y, y_lengths, y_max_length)
+      y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x.dtype)
+
+      ctc_out, _ = self.decoder(y, y_mask, g=g, reverse=False)
+
+      ctc_out = ctc_out[:, :self.n_vocab]
+
+      ctc_out_greedy = torch.argmax(ctc_out, dim=1)
+
+      #"true" durations extracted from ctc
+      durs = torch.zeros([x.shape[0], x.shape[1] * 2 + 1]).cuda()
+
+      for i in range(len(ctc_out)):
+        blanks, cnts = self.dur_extractor(x[i, :x_lengths[i]].cpu().numpy(), ctc_out_greedy[i, :y_lengths[i]].detach().cpu().numpy(),
+                                        ctc_out[i, :y_lengths[i]].detach().cpu().numpy(), y_lengths[i].cpu().numpy())
+
+        combined_durs = np.empty(blanks.size + cnts.size)
+        combined_durs[::2] = blanks
+        combined_durs[1::2] = cnts
+
+        durs[i, :combined_durs.shape[0]] = torch.Tensor(combined_durs).cuda()
+
+      logw_ = torch.log(durs + 1.)
+      #logw_ - true log durations
+    else:
+
+      #convert predicted logw to durations
+
+      durs = torch.round(torch.exp(logw) - 1.).long()
+
+      y_lengths = torch.sum(durs, dim=-1)
+
+      y_max_length, _ = torch.max(y_lengths, dim=-1)
+
+      print(durs.shape, y_lengths.shape, y_max_length.shape)
+      print(y_lengths, y_max_length)
+
+      y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x.dtype)
+
+    """
+    durs = torch.round(torch.exp(logw) - 1.).long()
+
+    y_lengths = torch.sum(durs, dim=-1)
+
+    y_max_length, _ = torch.max(y_lengths, dim=-1)
+
+    print(durs.shape, y_lengths.shape, y_max_length.shape)
+    print(y_lengths, y_max_length)
+
+    y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x.dtype)
+    """
 
     attn_mask = torch.unsqueeze(x_mask, -1) * torch.unsqueeze(y_mask, 2)
 
-    path = commons.generate_path(durs_from_ctc, attn_mask.squeeze(1)).unsqueeze(1).float()
+    path = commons.generate_path(durs, attn_mask.squeeze(1)).unsqueeze(1).float()
 
     x_proj = torch.matmul(path.squeeze(1).transpose(1, 2), x_oh_blanks.transpose(1, 2)).transpose(1, 2)
 
-    x_proj_greedy = torch.argmax(x_proj, dim=1)
+    #x_proj_greedy = torch.argmax(x_proj, dim=1)
 
     #print(x_proj_greedy)
 
@@ -395,25 +403,23 @@ class FlowGenerator(nn.Module):
     pred_ctc_output = self.encoder(x_proj, y_mask)
     #predicted ctc output by encoder
 
-    #print(pred_ctc_output.shape)
+    #plt.imshow(ctc_out[0].detach().cpu())
+    #plt.show()
+
     #plt.imshow(pred_ctc_output[0].detach().cpu())
     #plt.show()
 
-    #print(pred_ctc_output.shape)
 
     pred_ctc_out = torch.cat([pred_ctc_output, torch.zeros(pred_ctc_output.shape[0], self.out_channels - self.n_vocab, pred_ctc_output.shape[2]).cuda()],
                                   dim=1)
     #padding to correct out channels for decoder
 
-    #print(pred_ctc_output.shape)
 
     #now we need to reconstruct the spectrogram
     #by reversed decoder
     y_pred, _ = self.decoder(pred_ctc_out, y_mask, g=g, reverse=True)
     y_pred = y_pred * y_mask
     #tested that original padded ctc works
-
-    #print(y_pred.shape)
 
     #plt.imshow(y[0].cpu())
     #plt.show()
