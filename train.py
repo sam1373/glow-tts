@@ -19,7 +19,7 @@ import utils
 from text.symbols import symbols
 
 global_step = 0
-ctc_loss = torch.nn.CTCLoss()
+ctc_loss = torch.nn.CTCLoss(zero_infinity=True)
 
 def main():
   """Assume Single Node Multi GPUs Training Only"""
