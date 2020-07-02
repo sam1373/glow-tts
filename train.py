@@ -113,8 +113,9 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
     ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths = generator(x, x_lengths, y, y_lengths, gen=False)
     l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
     l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred)**2) / (torch.sum(y_lengths) * y.shape[1])
+    l_ctc_pred = torch.sum((ctc_out[:, :, :pred_ctc_out.shape[2]] - pred_ctc_out)**2) / (torch.sum(y_lengths) * y.shape[1])
     l_length = torch.sum((logw - logw_)**2) / torch.sum(x_lengths)
-    loss_gs = [l_ctc, l_tts, l_length]
+    loss_gs = [l_ctc, l_tts, l_length, l_ctc_pred]
     loss_g = sum(loss_gs)
 
     if hps.train.fp16_run:
@@ -165,8 +166,10 @@ def evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, write
         ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths = generator(x, x_lengths, y, y_lengths, gen=False)
         l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
         l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (torch.sum(y_lengths) * y.shape[1])
+        l_ctc_pred = torch.sum((ctc_out[:, :, :pred_ctc_out.shape[2]] - pred_ctc_out) ** 2) / (
+                  torch.sum(y_lengths) * y.shape[1])
         l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
-        loss_gs = [l_ctc, l_tts, l_length]
+        loss_gs = [l_ctc, l_tts, l_length, l_ctc_pred]
         loss_g = sum(loss_gs)
 
         if batch_idx == 0:

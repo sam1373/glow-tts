@@ -12,6 +12,8 @@ import numpy as np
 
 from extract_durs import DurationExtractor
 
+#import matplotlib.pyplot as plt
+
 class DurationPredictor(nn.Module):
   def __init__(self, in_channels, filter_channels, kernel_size, p_dropout):
     super().__init__()
@@ -403,6 +405,8 @@ class FlowGenerator(nn.Module):
     pred_ctc_output = self.encoder(x_proj, y_mask)
     #predicted ctc output by encoder
 
+    #print(ctc_out)
+
     #plt.imshow(ctc_out[0].detach().cpu())
     #plt.show()
 
@@ -410,14 +414,14 @@ class FlowGenerator(nn.Module):
     #plt.show()
 
 
-    pred_ctc_out = torch.cat([pred_ctc_output, torch.zeros(pred_ctc_output.shape[0], self.out_channels - self.n_vocab, pred_ctc_output.shape[2]).cuda()],
+    pred_ctc_out_padded = torch.cat([pred_ctc_output, torch.zeros(pred_ctc_output.shape[0], self.out_channels - self.n_vocab, pred_ctc_output.shape[2]).cuda()],
                                   dim=1)
     #padding to correct out channels for decoder
 
 
     #now we need to reconstruct the spectrogram
     #by reversed decoder
-    y_pred, _ = self.decoder(pred_ctc_out, y_mask, g=g, reverse=True)
+    y_pred, _ = self.decoder(pred_ctc_out_padded, y_mask, g=g, reverse=True)
     y_pred = y_pred * y_mask
     #tested that original padded ctc works
 
@@ -426,8 +430,10 @@ class FlowGenerator(nn.Module):
 
     #plt.imshow(y_pred[0].detach().cpu())
     #plt.show()
-
-    return ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths
+    if gen == False:
+      return ctc_out, pred_ctc_output, logw, logw_, y_pred, y_lengths
+    else:
+      return y_pred, y_lengths
 
   def preprocess(self, y, y_lengths, y_max_length):
     if y_max_length is not None:
