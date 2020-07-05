@@ -366,6 +366,8 @@ class FlowGenerator(nn.Module):
 
       y_lengths = torch.sum(durs, dim=-1)
 
+      y_lengths = (y_lengths // self.n_sqz) * self.n_sqz
+
       y_max_length, _ = torch.max(y_lengths, dim=-1)
 
       print(durs.shape, y_lengths.shape, y_max_length.shape)
@@ -403,9 +405,16 @@ class FlowGenerator(nn.Module):
     #next feed into encoder to get ctc
 
     pred_ctc_output = self.encoder(x_proj, y_mask)
+
+    if gen == False:
+      pred_ctc_output = pred_ctc_output + torch.randn(pred_ctc_output.shape).cuda() * 0.3
+
     #predicted ctc output by encoder
 
     #print(ctc_out)
+    #print(ctc_out.shape)
+    #print(ctc_out[0].mean(dim=-2), ctc_out[0].min(dim=-2), ctc_out[0].max(dim=-2))
+    #print(pred_ctc_output[0].mean(dim=-2), pred_ctc_output[0].min(dim=-2), pred_ctc_output[0].max(dim=-2))
 
     #plt.imshow(ctc_out[0].detach().cpu())
     #plt.show()
@@ -418,10 +427,11 @@ class FlowGenerator(nn.Module):
                                   dim=1)
     #padding to correct out channels for decoder
 
-
     #now we need to reconstruct the spectrogram
     #by reversed decoder
     y_pred, _ = self.decoder(pred_ctc_out_padded, y_mask, g=g, reverse=True)
+
+
     y_pred = y_pred * y_mask
     #tested that original padded ctc works
 
@@ -430,6 +440,20 @@ class FlowGenerator(nn.Module):
 
     #plt.imshow(y_pred[0].detach().cpu())
     #plt.show()
+
+    #plt.figure()
+
+    """
+    fig, axs = plt.subplots(4)
+    fig.suptitle('CTC and spectrograms')
+    axs[0].imshow(ctc_out[0].detach().cpu())
+    axs[1].imshow(pred_ctc_output[0].detach().cpu())
+    axs[2].imshow(y[0].detach().cpu())
+    axs[3].imshow(y_pred[0].detach().cpu())
+    plt.show()
+    input()
+    """
+
     if gen == False:
       return ctc_out, pred_ctc_output, logw, logw_, y_pred, y_lengths
     else:
