@@ -91,7 +91,7 @@ def train_and_eval(rank, n_gpus, hps):
     if rank==0:
       train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer)
       evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, writer_eval)
-      if epoch % 100 == 0:
+      if epoch % 50 == 0:
         utils.save_checkpoint(generator, optimizer_g, hps.train.learning_rate, epoch, os.path.join(hps.model_dir, "G_{}.pth".format(epoch)))
     else:
       train(rank, epoch, hps, generator, optimizer_g, train_loader, None, None)
@@ -110,12 +110,16 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
     # Train Generator
     optimizer_g.zero_grad()
 
-    ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths = generator(x, x_lengths, y, y_lengths, gen=False)
+    ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths, logdet = generator(x, x_lengths, y, y_lengths, gen=False)
     l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
-    l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred)**2) / (torch.sum(y_lengths) * y.shape[1])
-    l_ctc_pred = torch.sum((ctc_out[:, :, :pred_ctc_out.shape[2]] - pred_ctc_out)**2) / (torch.sum(y_lengths) * y.shape[1])
-    l_length = torch.sum((logw - logw_)**2) / torch.sum(x_lengths)
-    loss_gs = [l_ctc, l_tts, l_length, l_ctc_pred]
+    l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (
+              torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+    l_ctc_pred = torch.sum((ctc_out[:, :, :pred_ctc_out.shape[2]] - pred_ctc_out) ** 2) / (
+              torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+    l_logdet = -torch.sum(logdet) / (
+              torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+    l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
+    loss_gs = [l_ctc, l_tts, l_length, l_ctc_pred, l_logdet]
     loss_g = sum(loss_gs)
 
     if hps.train.fp16_run:
@@ -163,13 +167,16 @@ def evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, write
         x, x_lengths = x.cuda(rank, non_blocking=True), x_lengths.cuda(rank, non_blocking=True)
         y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
 
-        ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths = generator(x, x_lengths, y, y_lengths, gen=False)
+        ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths, logdet = generator(x, x_lengths, y, y_lengths, gen=False)
         l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
-        l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (torch.sum(y_lengths) * y.shape[1])
+        l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (
+                  torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
         l_ctc_pred = torch.sum((ctc_out[:, :, :pred_ctc_out.shape[2]] - pred_ctc_out) ** 2) / (
-                  torch.sum(y_lengths) * y.shape[1])
+                  torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+        l_logdet = -torch.sum(logdet) / (
+                  torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
         l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
-        loss_gs = [l_ctc, l_tts, l_length, l_ctc_pred]
+        loss_gs = [l_ctc, l_tts, l_length, l_ctc_pred, l_logdet]
         loss_g = sum(loss_gs)
 
         if batch_idx == 0:

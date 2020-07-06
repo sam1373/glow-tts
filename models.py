@@ -337,7 +337,7 @@ class FlowGenerator(nn.Module):
       y, y_lengths, y_max_length = self.preprocess(y, y_lengths, y_max_length)
       y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x.dtype)
 
-      ctc_out, _ = self.decoder(y, y_mask, g=g, reverse=False)
+      ctc_out, logdet = self.decoder(y, y_mask, g=g, reverse=False)
 
       ctc_out = ctc_out[:, :self.n_vocab]
 
@@ -455,7 +455,7 @@ class FlowGenerator(nn.Module):
     """
 
     if gen == False:
-      return ctc_out, pred_ctc_output, logw, logw_, y_pred, y_lengths
+      return ctc_out, pred_ctc_output, logw, logw_, y_pred, y_lengths, logdet
     else:
       return y_pred, y_lengths
 
