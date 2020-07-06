@@ -116,10 +116,10 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
               torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
     #l_ctc_pred = torch.sum((ctc_out[:, :, :pred_ctc_out.shape[2]] - pred_ctc_out) ** 2) / (
     #          torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
-    l_logdet = -torch.sum(logdet) / (
-              torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+    #l_logdet = -torch.sum(logdet) / (
+    #          torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
     l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
-    loss_gs = [l_ctc, l_tts, l_length, l_logdet]
+    loss_gs = [l_ctc, l_tts, l_length]
     loss_g = sum(loss_gs)
 
     if hps.train.fp16_run:
