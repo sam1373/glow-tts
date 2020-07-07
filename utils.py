@@ -138,6 +138,15 @@ def load_filepaths_and_text(filename, split="|"):
         filepaths_and_text = [line.strip().split(split) for line in f]
     return filepaths_and_text
 
+def strtobool(v):
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise False
 
 def get_hparams(init=True):
     parser = argparse.ArgumentParser()
@@ -147,14 +156,18 @@ def get_hparams(init=True):
                         help='Model directory')
     parser.add_argument('-b', '--batch_size', type=int, default=8, required=False,
                         help='Batch size')
-    parser.add_argument('-p', '--keep_punct', type=bool, default=True, required=False,
+    parser.add_argument('-p', '--keep_punct', default=True, required=False,
+                        dest='keep_punct', type=lambda x: bool(strtobool(x)),
                         help='Keep punctuation or turn it into blanks')
 
-    parser.add_argument('-cp', '--ctc_pred', type=bool, default=False, required=False,
+    parser.add_argument('-cp', '--ctc_pred', default=False, required=False,
+                        dest='ctc_pred', type=lambda x: bool(strtobool(x)),
                         help='Use ctc pred loss')
-    parser.add_argument('-ld', '--log_det', type=bool, default=False, required=False,
+    parser.add_argument('-ld', '--log_det', default=False, required=False,
+                        dest='log_det', type=lambda x: bool(strtobool(x)),
                         help='Use log dets in loss')
-    parser.add_argument('-l1', '--l1_loss', type=bool, default=False, required=False,
+    parser.add_argument('-l1', '--l1_loss', default=False, required=False,
+                        dest='l1_loss', type=lambda x: bool(strtobool(x)),
                         help='Use l1 loss for ctc pred and spectrogram loss')
     parser.add_argument('-gc', '--grad_clip', type=float, default=5, required=False,
                         help='Gradient clipping value')
