@@ -128,7 +128,7 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
       grad_norm = commons.clip_grad_value_(amp.master_params(optimizer_g._optim), 5)
     else:
       loss_g.backward()
-      grad_norm = commons.clip_grad_value_(generator.parameters(), 0.01)
+      grad_norm = commons.clip_grad_value_(generator.parameters(), 0.1)
     optimizer_g.step()
 
     if rank==0:
