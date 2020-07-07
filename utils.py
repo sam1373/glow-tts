@@ -150,6 +150,13 @@ def get_hparams(init=True):
     parser.add_argument('-p', '--keep_punct', type=bool, default=True, required=False,
                         help='Keep punctuation or turn it into blanks')
 
+    parser.add_argument('-cp', '--ctc_pred', type=bool, default=False, required=False,
+                        help='Use ctc pred loss')
+    parser.add_argument('-ld', '--log_det', type=bool, default=False, required=False,
+                        help='Use log dets in loss')
+    parser.add_argument('-l1', '--l1_loss', type=bool, default=False, required=False,
+                        help='Use l1 loss for ctc pred and spectrogram loss')
+
     args = parser.parse_args()
     model_dir = args.model  # os.path.join("/logs", args.model)
 
@@ -169,6 +176,9 @@ def get_hparams(init=True):
     config = json.loads(data)
 
     hparams = HParams(**config)
+    hparams.ctc_pred = args.ctc_pred
+    hparams.log_det = args.log_det
+    hparams.l1_loss = args.l1_loss
     hparams.model_dir = model_dir
     hparams.train.batch_size = args.batch_size
     hparams.data.keep_punct = args.keep_punct

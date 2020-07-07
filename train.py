@@ -112,14 +112,27 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
 
     ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths, logdet = generator(x, x_lengths, y, y_lengths, gen=False)
     l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
-    l_tts = torch.sum(torch.abs(y[:, :, :y_pred.shape[2]] - y_pred)) / (
+    if hps.l1_loss:
+      l_tts = torch.sum(torch.abs(y[:, :, :y_pred.shape[2]] - y_pred)) / (
+                torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+    else:
+      l_tts = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (
               torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
-    #l_ctc_pred = torch.sum(torch.abs(y[:, :, :y_pred.shape[2]] - y_pred)) / (
-    #          torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
-    #l_logdet = -torch.sum(logdet) / (
-    #          torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
     l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
     loss_gs = [l_ctc, l_tts, l_length]
+    if hps.ctc_pred:
+      if hps.l1_loss:
+        l_ctc_pred = torch.sum(torch.abs(y[:, :, :y_pred.shape[2]] - y_pred)) / (
+                 torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+      else:
+        l_ctc_pred = torch.sum((y[:, :, :y_pred.shape[2]] - y_pred) ** 2) / (
+                torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+      loss_gs.append(l_ctc_pred)
+    if hps.log_det:
+      l_logdet = -torch.sum(logdet) / (
+                torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+      loss_gs.append(l_logdet)
+
     loss_g = sum(loss_gs)
 
     if hps.train.fp16_run:
