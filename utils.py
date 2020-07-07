@@ -182,7 +182,7 @@ def get_hparams(init=True):
     hparams.log_det = args.log_det
     hparams.l1_loss = args.l1_loss
     hparams.model_dir = model_dir
-    hps.grad_clip = grad_clip
+    hparams.grad_clip = grad_clip
     hparams.train.batch_size = args.batch_size
     hparams.data.keep_punct = args.keep_punct
     return hparams
