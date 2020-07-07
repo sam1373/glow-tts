@@ -156,6 +156,8 @@ def get_hparams(init=True):
                         help='Use log dets in loss')
     parser.add_argument('-l1', '--l1_loss', type=bool, default=False, required=False,
                         help='Use l1 loss for ctc pred and spectrogram loss')
+    parser.add_argument('-gc', '--grad_clip', type=float, default=5, required=False,
+                        help='Gradient clipping value')
 
     args = parser.parse_args()
     model_dir = args.model  # os.path.join("/logs", args.model)
@@ -180,6 +182,7 @@ def get_hparams(init=True):
     hparams.log_det = args.log_det
     hparams.l1_loss = args.l1_loss
     hparams.model_dir = model_dir
+    hps.grad_clip = grad_clip
     hparams.train.batch_size = args.batch_size
     hparams.data.keep_punct = args.keep_punct
     return hparams
