@@ -181,8 +181,8 @@ def get_hparams(init=True):
     hparams.ctc_pred = args.ctc_pred
     hparams.log_det = args.log_det
     hparams.l1_loss = args.l1_loss
+    hparams.grad_clip = args.grad_clip
     hparams.model_dir = model_dir
-    hparams.grad_clip = grad_clip
     hparams.train.batch_size = args.batch_size
     hparams.data.keep_punct = args.keep_punct
     return hparams
