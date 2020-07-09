@@ -98,7 +98,7 @@ class irevnet_block(nn.Module):
             x2 = self.psi.forward(x2)
         #print(x1.shape, Fx2.shape)
         y1 = Fx2 + x1
-        return merge(x2, y1) * x_mask, 0.
+        return merge(x2, y1) * x_mask, torch.Tensor([0.]).cuda()
 
     def inverse(self, x, x_mask, g=None):
         """ bijective or injecitve block inverse """
@@ -116,7 +116,7 @@ class irevnet_block(nn.Module):
             x = (x1, x2)
         else:
             x = merge(x1, x2)
-        return x * x_mask, 0.
+        return x * x_mask, torch.Tensor([0.]).cuda()
 
 
 if __name__ == '__main__':

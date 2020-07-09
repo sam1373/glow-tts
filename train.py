@@ -111,6 +111,11 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
     optimizer_g.zero_grad()
 
     ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths, logdet = generator(x, x_lengths, y, y_lengths, gen=False)
+    #print(ctc_out.shape, pred_ctc_out.shape)
+    #print("real")
+    #print(ctc_out[:, :len(symbols)].mean(), pred_ctc_out[:, :len(symbols)].mean())
+    #print("padded")
+    #print(ctc_out[:, len(symbols):].mean(), pred_ctc_out[:, len(symbols):].mean())
     l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
     if hps.l1_loss:
       l_tts = torch.sum(torch.abs(y[:, :, :y_pred.shape[2]] - y_pred)) / (

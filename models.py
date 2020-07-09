@@ -56,13 +56,21 @@ class Encoder(nn.Module):
 
     self.drop = nn.Dropout(p_dropout)
     self.conv_1 = nn.Conv1d(in_channels, filter_channels, kernel_size, padding=kernel_size//2)
-    self.norm_1 = attentions.LayerNorm(filter_channels)
+    self.norm_1 = nn.BatchNorm1d(filter_channels, affine=True)
     self.conv_2 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size//2)
-    self.norm_2 = attentions.LayerNorm(filter_channels)
+    self.norm_2 = nn.BatchNorm1d(filter_channels, affine=True)
+    self.conv_3 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+    self.norm_3 = nn.BatchNorm1d(filter_channels, affine=True)
+    self.conv_4 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+    self.norm_4 = nn.BatchNorm1d(filter_channels, affine=True)
+    self.conv_5 = nn.Conv1d(filter_channels, filter_channels, kernel_size, padding=kernel_size // 2)
+    self.norm_5 = nn.BatchNorm1d(filter_channels, affine=True)
     self.proj = nn.Conv1d(filter_channels, out_channels, 1)
+    #self.final_norm = nn.BatchNorm1d(out_channels, affine=False)
 
   def forward(self, x, x_mask):
-    x = self.conv_1(x * x_mask)
+    x0 = x * x_mask
+    x = self.conv_1(x0)
     x = torch.relu(x)
     x = self.norm_1(x)
     x = self.drop(x)
@@ -70,7 +78,20 @@ class Encoder(nn.Module):
     x = torch.relu(x)
     x = self.norm_2(x)
     x = self.drop(x)
+    x = self.conv_3(x * x_mask)
+    x = torch.relu(x)
+    x = self.norm_3(x)
+    x = self.drop(x)
+    x = self.conv_4(x * x_mask)
+    x = torch.relu(x)
+    x = self.norm_4(x)
+    x = self.drop(x)
+    x = self.conv_5(x * x_mask)
+    x = torch.relu(x)
+    x = self.norm_5(x)
+    x = self.drop(x)
     x = self.proj(x * x_mask)
+    x = x0 + x
     return x * x_mask
 
 
@@ -108,10 +129,10 @@ class TextPreEncoder(nn.Module):
     self.prenet = prenet
     self.gin_channels = gin_channels
 
-    self.proj_w = DurationPredictor(n_vocab + gin_channels, filter_channels_dp, kernel_size, p_dropout)
+    self.proj_w = DurationPredictor(out_channels + gin_channels, filter_channels_dp, kernel_size, p_dropout)
   
   def forward(self, x, x_lengths, g=None):
-    x_oh = torch.zeros(x.shape[0], self.n_vocab, x.shape[1]).cuda()
+    x_oh = torch.zeros(x.shape[0], self.out_channels, x.shape[1]).cuda()
     x_oh.scatter_(1, x.unsqueeze(1), 1)
 
     x_mask = torch.unsqueeze(commons.sequence_mask(x_lengths, x_oh.size(2)), 1).to(x.dtype)
@@ -209,6 +230,8 @@ class FlowSpecDecoder(nn.Module):
       flows = reversed(self.flows)
       logdet_tot = None
 
+    #if reverse:
+    #  x = torch.log(x) - torch.log(1 - x)
 
     if self.n_sqz > 1:
       x, x_mask = commons.squeeze(x, x_mask, self.n_sqz)
@@ -220,6 +243,10 @@ class FlowSpecDecoder(nn.Module):
         x, logdet = f(x, x_mask, g=g, reverse=reverse)
     if self.n_sqz > 1:
       x, x_mask = commons.unsqueeze(x, x_mask, self.n_sqz)
+
+    #if not reverse:
+    #  x = F.sigmoid(x)
+
     return x, logdet_tot
 
   def store_inverse(self):
@@ -300,10 +327,10 @@ class FlowGenerator(nn.Module):
         gin_channels=gin_channels)
 
     self.encoder = Encoder(
-        n_vocab,
+        out_channels,
         hidden_channels_enc,
-        n_vocab,
-        kernel_size,
+        out_channels,
+        11,
         p_dropout
     )
 
@@ -342,9 +369,9 @@ class FlowGenerator(nn.Module):
       y, y_lengths, y_max_length = self.preprocess(y, y_lengths, y_max_length)
       y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x.dtype)
 
-      ctc_out, logdet = self.decoder(y, y_mask, g=g, reverse=False)
+      ctc_out_padded, logdet = self.decoder(y, y_mask, g=g, reverse=False)
 
-      ctc_out = ctc_out[:, :self.n_vocab]
+      ctc_out = ctc_out_padded[:, :self.n_vocab]
 
       ctc_out_greedy = torch.argmax(ctc_out, dim=1)
 
@@ -399,6 +426,9 @@ class FlowGenerator(nn.Module):
 
     x_proj = torch.matmul(path.squeeze(1).transpose(1, 2), x_oh_blanks.transpose(1, 2)).transpose(1, 2)
 
+    x_proj = (x_proj - 0.5) * 10.
+
+
     #x_proj_greedy = torch.argmax(x_proj, dim=1)
 
     #print(x_proj_greedy)
@@ -409,10 +439,10 @@ class FlowGenerator(nn.Module):
     #at this point x_proj is multiplied one hot representations, contains both blanks and symbols
     #next feed into encoder to get ctc
 
-    pred_ctc_output = self.encoder(x_proj, y_mask)
+    pred_ctc_out_padded = self.encoder(x_proj, y_mask)
 
     if gen == False:
-      pred_ctc_output = pred_ctc_output + torch.randn(pred_ctc_output.shape).cuda() * 0.3
+      pred_ctc_out_padded = pred_ctc_out_padded + torch.randn(pred_ctc_out_padded.shape).cuda() * 0.3
 
     #predicted ctc output by encoder
 
@@ -428,8 +458,10 @@ class FlowGenerator(nn.Module):
     #plt.show()
 
 
-    pred_ctc_out_padded = torch.cat([pred_ctc_output, torch.zeros(pred_ctc_output.shape[0], self.out_channels - self.n_vocab, pred_ctc_output.shape[2]).cuda()],
-                                  dim=1)
+    #test predicting the padded values
+    ##pred_ctc_out_padded = torch.cat([pred_ctc_output, torch.zeros(pred_ctc_output.shape[0], self.out_channels - self.n_vocab, pred_ctc_output.shape[2]).cuda()],
+    ##                              dim=1)
+
     #padding to correct out channels for decoder
 
     #now we need to reconstruct the spectrogram
@@ -460,7 +492,7 @@ class FlowGenerator(nn.Module):
     """
 
     if gen == False:
-      return ctc_out, pred_ctc_output, logw, logw_, y_pred, y_lengths, logdet
+      return ctc_out_padded, pred_ctc_out_padded, logw, logw_, y_pred, y_lengths, logdet
     else:
       return y_pred, y_lengths
 
