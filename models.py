@@ -12,6 +12,8 @@ import numpy as np
 
 from extract_durs import DurationExtractor
 
+from revnet_block import irevnet_block
+
 #import matplotlib.pyplot as plt
 
 class DurationPredictor(nn.Module):
@@ -183,6 +185,8 @@ class FlowSpecDecoder(nn.Module):
 
     self.flows = nn.ModuleList()
     for b in range(n_blocks):
+      self.flows.append(irevnet_block(in_channels * n_sqz, in_channels * n_sqz // 2, stride=1, mult=4))
+      """
       self.flows.append(modules.ActNorm(channels=in_channels * n_sqz))
       self.flows.append(modules.InvConvNear(channels=in_channels * n_sqz, n_split=n_split))
       self.flows.append(
@@ -195,6 +199,7 @@ class FlowSpecDecoder(nn.Module):
           gin_channels=gin_channels,
           p_dropout=p_dropout,
           sigmoid_scale=sigmoid_scale))
+      """
 
   def forward(self, x, x_mask, g=None, reverse=False):
     if not reverse:
