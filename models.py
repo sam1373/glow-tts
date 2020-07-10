@@ -440,9 +440,11 @@ class FlowGenerator(nn.Module):
     #next feed into encoder to get ctc
 
     pred_ctc_out_padded = self.encoder(x_proj, y_mask)
+    #test if just predict correct ctc out + noise
+    #pred_ctc_out_padded = ctc_out_padded + torch.randn(ctc_out_padded.shape).cuda() * 0.5
 
-    if gen == False:
-      pred_ctc_out_padded = pred_ctc_out_padded + torch.randn(pred_ctc_out_padded.shape).cuda() * 0.3
+    #if gen == False:
+    #  pred_ctc_out_padded = pred_ctc_out_padded + torch.randn(pred_ctc_out_padded.shape).cuda() * 0.3
 
     #predicted ctc output by encoder
 
@@ -466,7 +468,8 @@ class FlowGenerator(nn.Module):
 
     #now we need to reconstruct the spectrogram
     #by reversed decoder
-    y_pred, _ = self.decoder(pred_ctc_out_padded, y_mask, g=g, reverse=True)
+    y_pred = y
+    #y_pred, _ = self.decoder(pred_ctc_out_padded, y_mask, g=g, reverse=True)
 
 
     y_pred = y_pred * y_mask
@@ -480,16 +483,17 @@ class FlowGenerator(nn.Module):
 
     #plt.figure()
 
-    """
-    fig, axs = plt.subplots(4)
+
+    """fig, axs = plt.subplots(5)
     fig.suptitle('CTC and spectrograms')
-    axs[0].imshow(ctc_out[0].detach().cpu())
-    axs[1].imshow(pred_ctc_output[0].detach().cpu())
-    axs[2].imshow(y[0].detach().cpu())
-    axs[3].imshow(y_pred[0].detach().cpu())
+    axs[0].imshow(ctc_out_padded[0].detach().cpu())
+    axs[1].imshow(x_proj[0].detach().cpu())
+    axs[2].imshow(pred_ctc_out_padded[0].detach().cpu())
+    axs[3].imshow(y[0].detach().cpu())
+    axs[4].imshow(y_pred[0].detach().cpu())
     plt.show()
-    input()
-    """
+    input()"""
+
 
     if gen == False:
       return ctc_out_padded, pred_ctc_out_padded, logw, logw_, y_pred, y_lengths, logdet
