@@ -231,7 +231,8 @@ class FlowSpecDecoder(nn.Module):
       logdet_tot = None
 
     #if reverse:
-    #  x = torch.log(x) - torch.log(1 - x)
+    #  x = x / 5.
+    #  x = torch.atanh(x)
 
     if self.n_sqz > 1:
       x, x_mask = commons.squeeze(x, x_mask, self.n_sqz)
@@ -245,7 +246,7 @@ class FlowSpecDecoder(nn.Module):
       x, x_mask = commons.unsqueeze(x, x_mask, self.n_sqz)
 
     #if not reverse:
-    #  x = F.sigmoid(x)
+    #  x = F.tanh(x) * 5.
 
     return x, logdet_tot
 

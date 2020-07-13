@@ -112,10 +112,12 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
 
     ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths, logdet = generator(x, x_lengths, y, y_lengths, gen=False)
     #print(ctc_out.shape, pred_ctc_out.shape)
-    print("real")
+    """print("real")
     print(ctc_out[:, :len(symbols)].mean(), pred_ctc_out[:, :len(symbols)].mean())
+    print(ctc_out[:, :len(symbols)].min(), pred_ctc_out[:, :len(symbols)].min())
+    print(ctc_out[:, :len(symbols)].max(), pred_ctc_out[:, :len(symbols)].max())
     print("padded")
-    print(ctc_out[:, len(symbols):].mean(), pred_ctc_out[:, len(symbols):].mean())
+    print(ctc_out[:, len(symbols):].mean(), pred_ctc_out[:, len(symbols):].mean())"""
     l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
     if hps.l1_loss:
       l_tts = torch.sum(torch.abs(y[:, :, :y_pred.shape[2]] - y_pred)) / (
@@ -132,7 +134,9 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
       else:
         l_ctc_pred = torch.sum((ctc_out[:, :, :pred_ctc_out.shape[2]] - pred_ctc_out) ** 2) / (
                 torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
+      l_ctc_clamp = torch.mean(F.relu(torch.abs(ctc_out) - 5.)) * 1000.
       loss_gs.append(l_ctc_pred)
+      loss_gs.append(l_ctc_clamp)
     if hps.log_det:
       l_logdet = -torch.sum(logdet) / (
                 torch.sum(y_lengths // hps.model.n_sqz) * hps.model.n_sqz * hps.data.n_mel_channels)
@@ -186,6 +190,11 @@ def evaluate(rank, epoch, hps, generator, optimizer_g, val_loader, logger, write
         y, y_lengths = y.cuda(rank, non_blocking=True), y_lengths.cuda(rank, non_blocking=True)
 
         ctc_out, pred_ctc_out, logw, logw_, y_pred, y_lengths, logdet = generator(x, x_lengths, y, y_lengths, gen=False)
+        print(ctc_out[:, :len(symbols)].mean(), pred_ctc_out[:, :len(symbols)].mean())
+        print(ctc_out[:, :len(symbols)].min(), pred_ctc_out[:, :len(symbols)].min())
+        print(ctc_out[:, :len(symbols)].max(), pred_ctc_out[:, :len(symbols)].max())
+        print("padded")
+        print(ctc_out[:, len(symbols):].mean(), pred_ctc_out[:, len(symbols):].mean())
         l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
         if hps.l1_loss:
           l_tts = torch.sum(torch.abs(y[:, :, :y_pred.shape[2]] - y_pred)) / (
