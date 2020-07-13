@@ -206,8 +206,8 @@ class FlowSpecDecoder(nn.Module):
 
     self.flows = nn.ModuleList()
     for b in range(n_blocks):
-      self.flows.append(irevnet_block(in_channels * n_sqz, in_channels * n_sqz // 2, stride=1, mult=4))
-      """
+      #self.flows.append(irevnet_block(in_channels * n_sqz, in_channels * n_sqz // 2, stride=1, mult=4))
+
       self.flows.append(modules.ActNorm(channels=in_channels * n_sqz))
       self.flows.append(modules.InvConvNear(channels=in_channels * n_sqz, n_split=n_split))
       self.flows.append(
@@ -220,7 +220,7 @@ class FlowSpecDecoder(nn.Module):
           gin_channels=gin_channels,
           p_dropout=p_dropout,
           sigmoid_scale=sigmoid_scale))
-      """
+
 
   def forward(self, x, x_mask, g=None, reverse=False):
     if not reverse:
@@ -371,6 +371,8 @@ class FlowGenerator(nn.Module):
 
       ctc_out_padded, logdet = self.decoder(y, y_mask, g=g, reverse=False)
 
+      #ctc_out_padded = F.tanh(ctc_out_padded) * 5.
+
       ctc_out = ctc_out_padded[:, :self.n_vocab]
 
       ctc_out_greedy = torch.argmax(ctc_out, dim=1)
@@ -407,6 +409,8 @@ class FlowGenerator(nn.Module):
 
       y_mask = torch.unsqueeze(commons.sequence_mask(y_lengths, y_max_length), 1).to(x.dtype)
 
+      print(y_mask.shape)
+
     """
     durs = torch.round(torch.exp(logw) - 1.).long()
 
@@ -439,7 +443,14 @@ class FlowGenerator(nn.Module):
     #at this point x_proj is multiplied one hot representations, contains both blanks and symbols
     #next feed into encoder to get ctc
 
+
     pred_ctc_out_padded = self.encoder(x_proj, y_mask)
+    #print(pred_ctc_out_padded.min(), pred_ctc_out_padded.max(), pred_ctc_out_padded.mean())
+    pred_ctc_out_padded = F.tanh(pred_ctc_out_padded) * 5.#torch.clamp(pred_ctc_out_padded, min=-5., max=5.)
+    #print(pred_ctc_out_padded.min(), pred_ctc_out_padded.max(), pred_ctc_out_padded.mean())
+    #print(x_proj.shape, y_mask.shape, pred_ctc_out_padded.shape, ctc_out_padded.shape)
+
+    #pred_ctc_out_padded[:, self.n_vocab:] = ctc_out_padded[:, self.n_vocab:]
     #test if just predict correct ctc out + noise
     #pred_ctc_out_padded = ctc_out_padded + torch.randn(ctc_out_padded.shape).cuda() * 0.5
 
@@ -468,8 +479,10 @@ class FlowGenerator(nn.Module):
 
     #now we need to reconstruct the spectrogram
     #by reversed decoder
-    y_pred = y
-    #y_pred, _ = self.decoder(pred_ctc_out_padded, y_mask, g=g, reverse=True)
+    #if gen == False:
+    #  y_pred = y
+    #else:
+    y_pred, _ = self.decoder(pred_ctc_out_padded, y_mask, g=g, reverse=True)
 
 
     y_pred = y_pred * y_mask
