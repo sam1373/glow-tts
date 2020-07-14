@@ -451,7 +451,9 @@ class FlowGenerator(nn.Module):
     #print(pred_ctc_out_padded.min(), pred_ctc_out_padded.max(), pred_ctc_out_padded.mean())
     #print(x_proj.shape, y_mask.shape, pred_ctc_out_padded.shape, ctc_out_padded.shape)
 
-    #pred_ctc_out_padded[:, self.n_vocab:] = ctc_out_padded[:, self.n_vocab:]
+    #mask = pred_ctc_out_padded < -3.
+    #print(pred_ctc_out_padded.shape, mask.shape, ctc_out_padded.shape, pred_ctc_out_padded[mask].shape)
+    #pred_ctc_out_padded[mask] = ctc_out_padded[mask]# + torch.randn(pred_ctc_out_padded.shape).cuda() * 0.3
     #test if just predict correct ctc out + noise
     #pred_ctc_out_padded = ctc_out_padded + torch.randn(ctc_out_padded.shape).cuda() * 0.5
 

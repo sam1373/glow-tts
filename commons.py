@@ -110,7 +110,7 @@ class Adam():
 
   def _get_lr_scale(self):
     if self.scheduler == "noam":
-      return np.power(self.dim_model, -0.5) * np.min([np.power(self.step_num, -0.5), self.step_num * np.power(self.warmup_steps, -1.5)])
+      return np.power(self.dim_model, -0.5) * np.min([np.power(self.step_num, -0.4), self.step_num * np.power(self.warmup_steps, -1.5)])
     else:
       return 1
 
