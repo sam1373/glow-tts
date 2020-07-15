@@ -169,8 +169,13 @@ def get_hparams(init=True):
     parser.add_argument('-l1', '--l1_loss', default=False, required=False,
                         dest='l1_loss', type=lambda x: bool(strtobool(x)),
                         help='Use l1 loss for ctc pred and spectrogram loss')
+    parser.add_argument('-rv', '--use_revnet_arch', default=False, required=False,
+                        dest='use_revnet_arch', type=lambda x: bool(strtobool(x)),
+                        help='Use revnet blocks for the decoder architecture')
     parser.add_argument('-gc', '--grad_clip', type=float, default=5, required=False,
                         help='Gradient clipping value')
+    parser.add_argument('-ce', '--ctc_epochs', type=int, default=100, required=False,
+                        help='Number of epochs for ctc loss')
 
     args = parser.parse_args()
     model_dir = args.model  # os.path.join("/logs", args.model)
@@ -196,6 +201,8 @@ def get_hparams(init=True):
     hparams.l1_loss = args.l1_loss
     hparams.grad_clip = args.grad_clip
     hparams.model_dir = model_dir
+    hparams.ctc_epochs = args.ctc_epochs
+    hparams.use_revnet_arch = args.use_revnet_arch
     hparams.train.batch_size = args.batch_size
     hparams.data.keep_punct = args.keep_punct
     return hparams

@@ -189,7 +189,8 @@ class FlowSpecDecoder(nn.Module):
       n_split=4,
       n_sqz=2,
       sigmoid_scale=False,
-      gin_channels=0):
+      gin_channels=0,
+      use_revnet_arch=False):
     super().__init__()
 
     self.in_channels = in_channels
@@ -206,20 +207,21 @@ class FlowSpecDecoder(nn.Module):
 
     self.flows = nn.ModuleList()
     for b in range(n_blocks):
-      #self.flows.append(irevnet_block(in_channels * n_sqz, in_channels * n_sqz // 2, stride=1, mult=4))
-
-      self.flows.append(modules.ActNorm(channels=in_channels * n_sqz))
-      self.flows.append(modules.InvConvNear(channels=in_channels * n_sqz, n_split=n_split))
-      self.flows.append(
-        attentions.CouplingBlock(
-          in_channels * n_sqz,
-          hidden_channels,
-          kernel_size=kernel_size, 
-          dilation_rate=dilation_rate,
-          n_layers=n_layers,
-          gin_channels=gin_channels,
-          p_dropout=p_dropout,
-          sigmoid_scale=sigmoid_scale))
+      if use_revnet_arch:
+        self.flows.append(irevnet_block(in_channels * n_sqz, in_channels * n_sqz // 2, stride=1, mult=4))
+      else:
+        self.flows.append(modules.ActNorm(channels=in_channels * n_sqz))
+        self.flows.append(modules.InvConvNear(channels=in_channels * n_sqz, n_split=n_split))
+        self.flows.append(
+          attentions.CouplingBlock(
+            in_channels * n_sqz,
+            hidden_channels,
+            kernel_size=kernel_size,
+            dilation_rate=dilation_rate,
+            n_layers=n_layers,
+            gin_channels=gin_channels,
+            p_dropout=p_dropout,
+            sigmoid_scale=sigmoid_scale))
 
 
   def forward(self, x, x_mask, g=None, reverse=False):
@@ -282,6 +284,7 @@ class FlowGenerator(nn.Module):
       hidden_channels_enc=None,
       hidden_channels_dec=None,
       prenet=False,
+      use_revnet_arch=False,
       **kwargs):
 
     super().__init__()
@@ -347,7 +350,8 @@ class FlowGenerator(nn.Module):
         n_split=n_split,
         n_sqz=n_sqz,
         sigmoid_scale=sigmoid_scale,
-        gin_channels=gin_channels)
+        gin_channels=gin_channels,
+        use_revnet_arch=use_revnet_arch)
 
     self.dur_extractor = DurationExtractor()
 

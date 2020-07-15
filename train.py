@@ -119,7 +119,7 @@ def train(rank, epoch, hps, generator, optimizer_g, train_loader, logger, writer
     print("padded")
     print(ctc_out[:, len(symbols):].mean(), pred_ctc_out[:, len(symbols):].mean())"""
     loss_gs = []
-    if epoch < 20:
+    if epoch < hps.ctc_epochs:
       l_ctc = ctc_loss(F.log_softmax(ctc_out.permute(2, 0, 1), dim=-1), x, y_lengths, x_lengths)
       loss_gs.append(l_ctc)
       l_length = torch.sum((logw - logw_) ** 2) / torch.sum(x_lengths)
