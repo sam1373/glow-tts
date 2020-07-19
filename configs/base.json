@@ -12,7 +12,7 @@
     "batch_size": 8,
     "ddi": true,
     "fp16_run": true,
-    "save_every": 200
+    "save_every": 50
   },
   "data": {
     "load_mel_from_disk": false,
